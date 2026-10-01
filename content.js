@@ -52,7 +52,9 @@ function goTo(id, tries = 10) {
   if (el.closest('.bdb-hidden')) { shown.add(id); scan(); }
   if (location.hash === '#' + id) history.replaceState(null, '', '#');
   location.hash = id;
-  // GitHub's SPA swallows the hash scroll, and lazy-loaded fragments above shift layout afterwards: scroll, then re-scroll.
+  // Center instantly in the same task as the hash jump so the top-aligned position is never painted (visible as a jitter).
+  el.scrollIntoView({ block: 'center', behavior: 'instant' });
+  // GitHub's SPA swallows the hash scroll, and lazy-loaded fragments above shift layout afterwards: re-scroll.
   for (const ms of [0, 250, 800]) setTimeout(() => el.scrollIntoView({ block: 'center' }), ms);
 }
 
