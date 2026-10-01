@@ -200,7 +200,12 @@ if (!only.length || only.includes('before-after')) {
     await page.mouse.move(size.width / 3, size.height / 2);
     clips.push(await capture(page, async () => {
       await page.waitForTimeout(1000);
-      for (let i = 0; i < 90; i++) { await page.mouse.wheel(0, 45); await page.waitForTimeout(40); }
+      // The clean side reaches the end of the page; wheeling past it bounces the page (a flicker frame).
+      const atBottom = () => page.evaluate(() => scrollY + innerHeight >= document.documentElement.scrollHeight - 50);
+      for (let i = 0; i < 90; i++) {
+        if (!await atBottom()) await page.mouse.wheel(0, 45);
+        await page.waitForTimeout(40);
+      }
       await page.waitForTimeout(1500);
     }));
     await context.close();

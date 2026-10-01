@@ -1,6 +1,6 @@
 <h1><img src="icons/icon-128.png" width="40" align="top" alt=""> Better DataFusion Bots</h1>
 
-A browser extension that folds the benchmark bot's comments on [apache/datafusion](https://github.com/apache/datafusion) pull requests into a compact status panel, so you can read the human conversation again.
+A browser extension that folds the benchmark bot's comments on [apache/datafusion](https://github.com/apache/datafusion) and [apache/arrow-rs](https://github.com/apache/arrow-rs) pull requests into a compact status panel, so you can read the human conversation again.
 
 ![The same scroll through a PR without the extension (bot comments everywhere) and with it (just the conversation)](docs/before-after.gif)
 
@@ -8,13 +8,13 @@ A browser extension that folds the benchmark bot's comments on [apache/datafusio
 
 ### A status panel instead of a flooded timeline
 
-Every benchmark bot comment (`adriangbot`) is hidden from the timeline and listed in a floating panel instead. Each row shows the run's status (🟡 running, 🟢 completed, 🔴 failed), which benchmark ran, and when. GitHub hides long timelines behind "Load more", and the extension expands it automatically so no bot comment is missed. The panel follows GitHub's light and dark themes.
+Every benchmark bot comment (`adriangbot`) is hidden from the timeline and listed in a floating panel instead. The `run benchmark …` requests that triggered the bot are hidden too. Each row shows the run's status (🟡 running, 🟢 completed, 🔴 failed), which benchmark ran, and when. GitHub hides long timelines behind "Load more", and the extension expands it automatically so no bot comment is missed. The panel follows GitHub's light and dark themes.
 
 <img src="docs/panel.png" width="380" alt="Panel in light theme"> <img src="docs/panel-dark.png" width="380" alt="Panel in dark theme">
 
 ### Show all / none
 
-**Show comments: All** brings every bot comment back into the timeline, and **None** folds them away again.
+**Show comments: All** brings every bot comment and benchmark request back into the timeline, and **None** folds them all away again. The button matching what's currently shown is highlighted. None is highlighted by default, and no button is highlighted after you pick individual comments with 👁.
 
 ![Clicking All floods the timeline with bot comments; None hides them again](docs/show-hide-all.gif)
 
@@ -26,13 +26,13 @@ Click 👁 on a row to bring back just that comment. The page scrolls to it and 
 
 ### Jump to the trigger
 
-Click ⚡ on a row to jump to the human `run benchmark …` comment that started that run.
+Click ⚡ on a row to jump to the human `run benchmark …` comment that started that run. The request is shown if it was hidden.
 
 ![Clicking the lightning icon scrolls to and highlights the comment that triggered the run](docs/go-to-trigger.gif)
 
 ### Results only
 
-**Results only** shows the completed benchmark results and keeps running and failed status updates hidden.
+**Results only** shows the completed benchmark results and keeps the requests and the running and failed status updates hidden.
 
 ![Clicking Results only, then scrolling down to a completed benchmark result](docs/results-only.gif)
 
@@ -60,7 +60,7 @@ It's a plain Manifest V3 extension with no build step.
 2. Open `chrome://extensions` (on Edge, `edge://extensions`).
 3. Turn on **Developer mode** (top-right).
 4. Click **Load unpacked** and select the cloned folder.
-5. Open any `https://github.com/apache/datafusion/pull/*` page.
+5. Open any `https://github.com/apache/datafusion/pull/*` or `https://github.com/apache/arrow-rs/pull/*` page.
 
 After pulling updates, click ↻ on the extension's card and refresh the PR tab.
 

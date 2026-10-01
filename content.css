@@ -27,3 +27,9 @@
 #bdb-panel .bdb-actions a { display: inline-flex; padding: 3px; border-radius: 4px; color: var(--fgColor-muted, #656d76); }
 #bdb-panel .bdb-actions a:hover { color: var(--fgColor-accent, #0969da); background: var(--bgColor-accent-muted, #ddf4ff); }
 #bdb-panel .bdb-actions a.bdb-on { color: var(--fgColor-accent, #0969da); }
+/* Selected filter: accent colours, so it reads as selected in both light and dark themes. */
+#bdb-panel .bdb-toolbar .btn.selected {
+  background: var(--bgColor-accent-muted, #ddf4ff);
+  color: var(--fgColor-accent, #0969da);
+  font-weight: 600;
+}

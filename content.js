@@ -1,6 +1,7 @@
 // ponytail: bot list + regexes are the only "config"; make a settings page when a second repo needs it
 const BOTS = new Set(['adriangbot']);
 const shown = new Set();
+let requests = []; // ids of the human "run benchmark …" comments the bot replied to
 let enabled = null; // toolbar on/off switch (see background.js); null until read from storage
 const ICON = {
   eye: '<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2c1.981 0 3.671.992 4.933 2.078 1.27 1.091 2.187 2.345 2.637 3.023a1.62 1.62 0 0 1 0 1.798c-.45.678-1.367 1.932-2.637 3.023C11.67 13.008 9.981 14 8 14c-1.981 0-3.671-.992-4.933-2.078C1.797 10.83.88 9.576.43 8.898a1.62 1.62 0 0 1 0-1.798c.45-.677 1.367-1.931 2.637-3.022C4.33 2.992 6.019 2 8 2ZM1.679 7.932a.12.12 0 0 0 0 .136c.411.622 1.241 1.75 2.366 2.717C5.176 11.758 6.527 12.5 8 12.5c1.473 0 2.825-.742 3.955-1.715 1.124-.967 1.954-2.096 2.366-2.717a.12.12 0 0 0 0-.136c-.412-.621-1.242-1.75-2.366-2.717C10.824 4.242 9.473 3.5 8 3.5c-1.473 0-2.825.742-3.955 1.715-1.124.967-1.954 2.096-2.366 2.717ZM8 10a2 2 0 1 1-.001-3.999A2 2 0 0 1 8 10Z"/></svg>',
@@ -46,6 +47,12 @@ function scan() {
     const time = (c.querySelector('relative-time')?.shadowRoot?.textContent ?? c.querySelector('relative-time')?.textContent ?? '').replace(/^on /, '');
     items.push({ id, status, trigger, cmd, time });
   }
+  // The requests that triggered the bot are part of the same noise: hidden alongside it, ⚡ reveals one.
+  requests = [...new Set(items.map(i => i.trigger.slice(1)).filter(Boolean))];
+  for (const id of requests) {
+    const el = document.getElementById(id);
+    (el?.closest('.js-timeline-item') ?? el)?.classList.toggle('bdb-hidden', !shown.has(id));
+  }
   render(items);
 }
 
@@ -79,9 +86,9 @@ function render(items) {
       </div>
       <div class="bdb-toolbar color-fg-muted">Show comments:
         <div class="BtnGroup">
-          <button class="btn btn-sm BtnGroup-item" data-all="1">All</button>
-          <button class="btn btn-sm BtnGroup-item" data-all="completed" title="Only completed benchmarks; running/failed stay hidden">Results only</button>
-          <button class="btn btn-sm BtnGroup-item" data-all="0">None</button>
+          <button class="btn btn-sm BtnGroup-item" data-all="1" title="Every bot comment and the requests that triggered them">All</button>
+          <button class="btn btn-sm BtnGroup-item" data-all="completed" title="Only completed benchmarks; requests and running/failed stay hidden">Results only</button>
+          <button class="btn btn-sm BtnGroup-item" data-all="0" title="Hide bot comments and the requests that triggered them">None</button>
         </div>
       </div><ul></ul>`;
     panel.querySelector('.Box-header').onclick = () => panel.classList.toggle('bdb-collapsed');
@@ -92,9 +99,20 @@ function render(items) {
       for (const li of panel.querySelectorAll('li')) {
         if (b.dataset.all === '1' || li.dataset.status === b.dataset.all) shown.add(li.querySelector('a[data-id]').dataset.id);
       }
+      if (b.dataset.all === '1') requests.forEach(id => shown.add(id));
       scan();
     };
     document.body.append(panel);
+  }
+  // Highlight the filter matching what's shown; none after 👁 picks a custom set.
+  const isShown = i => shown.has(i.id);
+  const anyRequest = requests.some(id => shown.has(id));
+  const active = items.every(isShown) && requests.every(id => shown.has(id)) ? '1'
+    : !anyRequest && items.every(i => isShown(i) === (i.status === 'completed')) ? 'completed'
+    : !anyRequest && !items.some(isShown) ? '0' : null;
+  for (const b of panel.querySelectorAll('.bdb-toolbar button')) {
+    b.classList.toggle('selected', b.dataset.all === active);
+    b.setAttribute('aria-pressed', b.dataset.all === active);
   }
   const counts = items.reduce((a, i) => ((a[i.status] = (a[i.status] || 0) + 1), a), {});
   panel.querySelector('.Box-title').innerHTML =

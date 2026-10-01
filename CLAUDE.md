@@ -1,6 +1,6 @@
 # Better DataFusion Bots
 
-Manifest V3 extension (no build step) that hides benchmark-bot comments on apache/datafusion PRs and lists them in a floating panel. Code: `content.js` + `content.css` (the page), `background.js` (toolbar button: turns the extension on/off via `storage.local` `enabled`), `manifest.json`. Tests: `npm test` (Playwright, offline against `tests/fixtures/`).
+Manifest V3 extension (no build step) that hides benchmark-bot comments (and the human `run benchmark …` requests they reply to) on apache/datafusion and apache/arrow-rs PRs and lists them in a floating panel. Code: `content.js` + `content.css` (the page), `background.js` (toolbar button: turns the extension on/off via `storage.local` `enabled`), `manifest.json`. Tests: `npm test` (Playwright, offline against `tests/fixtures/<repo>-pr-<n>.html`; add a repo by adding it to `manifest.json` matches and a fixture via `node tests/save-fixtures.mjs <repo>/<n>`).
 
 ## Keep README images in sync
 
@@ -39,6 +39,7 @@ If you change `icons/icon.svg` or `icons/icon-off.svg` (the grey toolbar icon sh
   - Taking screenshots while recording leaves garbled frames → the visible-change check runs in a separate pass from the recording.
   - Playwright's `recordVideo` is low-bitrate VP8 whose quality pulses (washed-out frames) → frames come from Chrome's screencast as PNGs (`capture()`), assembled with their real timing.
   - Dithering shimmers on GitHub's flat greys → the palette uses `dither=none`.
+  - Wheeling past the end of the page makes it bounce → the before/after scroll stops sending wheel events once the page is at the bottom.
   - A real one-frame scroll jitter in the extension itself (hash jump, then re-center) → `goTo` in `content.js` centers instantly in the same task. If the flicker check flags a frame, find out whether it's the recording or the extension before working around it.
 - Move the (fake, drawn-in-page) cursor to the target before clicking, and pause after, so viewers can follow what happened. Scroll with the mouse wheel when the scroll itself is part of the story.
 - Capture at 2x pixels and output at 1600px wide (feature GIFs) or 1800px (before/after); smaller output makes text blurry. Keep each feature GIF under ~1.5 MB and the before/after GIF under ~6 MB.
