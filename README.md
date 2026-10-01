@@ -12,6 +12,20 @@ Every benchmark bot comment (`adriangbot`) is hidden from the timeline and liste
 
 <img src="docs/panel.png" width="380" alt="Panel in light theme"> <img src="docs/panel-dark.png" width="380" alt="Panel in dark theme">
 
+### Runs: every benchmark, grouped by request
+
+The **Runs** tab lists every benchmark the bot ran, grouped by the request that triggered it. A request like `run benchmarks` can start several benchmarks. Each benchmark shows:
+
+- its current status
+- its result (`4 faster · 1 slower · 41 same · total −0.5%`, or a faster/slower count from criterion's table)
+- the error if it failed (`BackoffLimitExceeded`)
+- how long it took
+- its updates (running → completed)
+
+Click an update's time to jump to that comment, or ⚡ to jump to the request. The panel remembers which tab you last used.
+
+![Opening the Runs tab, then clicking a completed result's time to jump to it](docs/runs-view.gif)
+
 ### Show all / none
 
 **Show comments: All** brings every bot comment and benchmark request back into the timeline, and **None** folds them all away again. The button matching what's currently shown is highlighted. None is highlighted by default, and no button is highlighted after you pick individual comments with 👁.

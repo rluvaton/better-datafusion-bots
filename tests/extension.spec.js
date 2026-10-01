@@ -30,7 +30,7 @@ test('collapses bot comments into a panel', async ({ context }) => {
   const panel = page.locator('#bdb-panel');
   await expect(panel).toBeVisible();
   await expect(panel.locator('.Box-header')).toContainText(/\d+ bot comments/);
-  const rows = panel.locator('li');
+  const rows = panel.locator('.bdb-comments li');
   expect(await rows.count()).toBeGreaterThan(0);
   // non-completed bot comments are hidden from the timeline
   expect(await page.locator('.bdb-hidden').count()).toBeGreaterThan(0);
@@ -60,11 +60,46 @@ test('arrow-rs: Arrow criterion benchmark comments', async ({ context }) => {
   await page.goto('https://github.com/apache/arrow-rs/pull/11285');
   const panel = page.locator('#bdb-panel');
   await expect(panel).toBeVisible();
-  await expect(panel.locator('li')).toHaveCount(4);
-  await expect(panel.locator('li[data-status="completed"]')).toHaveCount(2);
-  await expect(panel.locator('li[data-status="running"]')).toHaveCount(2);
+  await expect(panel.locator('.bdb-comments li')).toHaveCount(4);
+  await expect(panel.locator('.bdb-comments li[data-status="completed"]')).toHaveCount(2);
+  await expect(panel.locator('.bdb-comments li[data-status="running"]')).toHaveCount(2);
   // the human conversation stays
   await expect(page.locator('.js-timeline-item', { hasText: 'Numbers look great' })).toBeVisible();
+});
+
+test('filters and tabs act on comments loaded after the panel first rendered', async ({ context }) => {
+  // Long PRs load in pages: the panel first renders with a few bot comments, more arrive later.
+  // Simulate it by hiding most of the timeline until the panel exists.
+  await context.addInitScript(() => addEventListener('DOMContentLoaded', () => {
+    const items = [...document.querySelectorAll('.js-timeline-item')].slice(10);
+    const parked = items.map(el => [el, el.parentNode, el.nextSibling]);
+    items.forEach(el => el.remove());
+    const wait = setInterval(() => {
+      if (!document.querySelector('#bdb-panel')) return;
+      clearInterval(wait);
+      for (const [el, parent, next] of parked.reverse()) parent.insertBefore(el, next?.isConnected ? next : null);
+    }, 50);
+  }));
+  const page = await context.newPage();
+  await page.goto(PR);
+  const panel = page.locator('#bdb-panel');
+  await expect(panel.locator('.Box-title strong')).toHaveText('26 bot comments');
+  await panel.getByRole('button', { name: 'All' }).click();
+  await expect(page.locator('.bdb-hidden')).toHaveCount(0);
+  await panel.locator('[data-view="runs"]').click();
+  await expect(panel.locator('.Box-title strong')).toHaveText('26 bot comments');
+  await expect(panel.locator('.bdb-run')).toHaveCount(13);
+});
+
+test('panel is not re-rendered while the page is idle', async ({ context }) => {
+  const page = await context.newPage();
+  await page.goto(PR);
+  const row = page.locator('#bdb-panel .bdb-comments li').first();
+  await page.waitForTimeout(1000); // let the initial scans (page load, storage read) finish
+  await row.evaluate(el => el.dataset.marker = '1');
+  await page.waitForTimeout(1500);
+  // the same element is still there: no render loop replacing the rows
+  await expect(page.locator('#bdb-panel .bdb-comments li[data-marker="1"]')).toHaveCount(1);
 });
 
 test('eye toggles a hidden comment back', async ({ context }) => {
@@ -85,7 +120,7 @@ test('eye toggles a hidden comment back', async ({ context }) => {
 test('large PR: extracts old-format benchmark names', async ({ context }) => {
   const page = await context.newPage();
   await page.goto('https://github.com/apache/datafusion/pull/22450');
-  const rows = page.locator('#bdb-panel li');
+  const rows = page.locator('#bdb-panel .bdb-comments li');
   await expect.poll(() => rows.count()).toBe(32);
   const cmds = await page.locator('#bdb-panel .bdb-cmd').allTextContents();
   expect(cmds.filter(c => c === '—')).toEqual([]);
@@ -113,14 +148,56 @@ test('trigger link scrolls to the human comment; show/hide all', async ({ contex
   await expect(page.locator('#bdb-panel a[data-id]').first()).toHaveClass(/bdb-on/);
   await page.getByRole('button', { name: 'Results only' }).click();
   const visibleBots = page.locator('.timeline-comment-group:not(.bdb-hidden .timeline-comment-group):has(a.author:text-is("adriangbot"))');
-  await expect(visibleBots).toHaveCount(await page.locator('#bdb-panel li[data-status="completed"]').count());
+  await expect(visibleBots).toHaveCount(await page.locator('#bdb-panel .bdb-comments li[data-status="completed"]').count());
   await expect.poll(pressed).toEqual(['Results only']);
   // A custom set via 👁 matches no filter.
-  await page.locator('#bdb-panel li[data-status="running"] a[data-id]').first().click();
+  await page.locator('#bdb-panel .bdb-comments li[data-status="running"] a[data-id]').first().click();
   await expect.poll(pressed).toEqual([]);
   await page.getByRole('button', { name: 'None' }).click();
   await expect.poll(pressed).toEqual(['None']);
   expect(await page.locator('.bdb-hidden').count()).toBeGreaterThan(0);
+});
+
+test('runs view: benchmarks grouped by request, with result, error and updates', async ({ context }) => {
+  const page = await context.newPage();
+  await page.goto(PR);
+  const panel = page.locator('#bdb-panel');
+  await panel.locator('[data-view="runs"]').click();
+  await expect(panel.locator('.bdb-comments')).toBeHidden();
+  // 26 bot comments = 13 benchmarks (each running, then completed or failed) across 9 requests
+  await expect(panel.locator('[data-view="runs"]')).toHaveText('Runs (13)');
+  await expect(panel.locator('.bdb-request')).toHaveCount(9);
+  const runs = panel.locator('.bdb-run');
+  await expect(runs).toHaveCount(13);
+  await expect(runs.filter({ has: page.locator('.bdb-updates a') })).toHaveCount(13);
+  // a request that ran several benchmarks ("run benchmarks") lists each of them
+  const first = panel.locator('.bdb-request').first();
+  await expect(first).toContainText('3 failed');
+  expect(await runs.locator('.bdb-cmd').allTextContents()).toEqual(expect.arrayContaining(['tpch', 'tpcds', 'clickbench_partitioned']));
+  await expect(runs.filter({ hasText: 'BackoffLimitExceeded' })).toHaveCount(8);
+  const tpch = runs.filter({ has: page.locator('.bdb-cmd', { hasText: /^tpch$/ }) }).filter({ has: page.locator('.bdb-dot[title="completed"]') });
+  await expect(tpch.locator('.bdb-result')).toHaveText(/0 faster · 0 slower · 22 same · total −0\.3%/);
+  // each update links to (and reveals) its comment
+  const update = tpch.locator('.bdb-updates a').last();
+  const id = (await update.getAttribute('href')).slice(1);
+  await update.click();
+  await expect(page.locator(`#${id}`)).toBeInViewport();
+  // the chosen tab is remembered
+  await page.reload();
+  await expect(page.locator('#bdb-panel [data-view="runs"]')).toHaveAttribute('aria-selected', 'true');
+});
+
+test('runs view: criterion results (arrow-rs) and old-format names (datafusion)', async ({ context }) => {
+  const page = await context.newPage();
+  await page.goto('https://github.com/apache/arrow-rs/pull/11285');
+  await page.locator('#bdb-panel [data-view="runs"]').click();
+  const results = page.locator('#bdb-panel .bdb-run .bdb-result');
+  await expect(results).toHaveText(['8 faster · 1 slower · 9 same (±5%)', '0 faster · 1 slower · 17 same (±5%)']);
+  // old format: "using: tpch" while running, "tpch_sf1.json" in results; both must land on one row
+  await page.goto('https://github.com/apache/datafusion/pull/22450');
+  await page.locator('#bdb-panel [data-view="runs"]').click();
+  await expect(page.locator('#bdb-panel .bdb-run')).toHaveCount(16);
+  await expect(page.locator('#bdb-panel .bdb-run .bdb-dot[title="running"]')).toHaveCount(0);
 });
 
 test('toolbar button turns the extension off and on', async ({ context }) => {
@@ -152,6 +229,6 @@ test('live: auto-clicks "Load more"', async ({ context }) => {
   await context.unroute('**/*');
   const page = await context.newPage();
   await page.goto('https://github.com/apache/datafusion/pull/22450');
-  await expect.poll(() => page.locator('#bdb-panel li').count(), { timeout: 30_000 }).toBe(32);
+  await expect.poll(() => page.locator('#bdb-panel .bdb-comments li').count(), { timeout: 30_000 }).toBe(32);
   await expect(page.locator('.ajax-pagination-btn')).toHaveCount(0);
 });

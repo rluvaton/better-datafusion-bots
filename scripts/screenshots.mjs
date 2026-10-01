@@ -8,7 +8,8 @@ import path from 'node:path';
 
 const EXT = path.resolve(import.meta.dirname, '..');
 const OUT = path.join(EXT, 'docs');
-const PR = 'https://github.com/apache/datafusion/pull/24672';
+// A closed PR with real discussion between the benchmark runs, so hiding them visibly declutters it.
+const PR = 'https://github.com/apache/datafusion/pull/21240';
 const viewport = { width: 1280, height: 800 };
 // No dithering: GitHub's UI is flat colours, and dither noise shimmers between frames (reads as flicker).
 const PALETTE = 'split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=none';
@@ -40,6 +41,13 @@ async function open({ extension = true, colorScheme = 'light', cursor, label, si
   // networkidle never settles reliably on live GitHub; wait for the bot's comments instead.
   await page.goto(PR);
   await page.locator('.timeline-comment-group a.author', { hasText: 'adriangbot' }).first().waitFor({ state: 'attached' });
+  // Long PRs load in pages ("Load more"), which the extension keeps clicking; GitHub swaps timeline chunks
+  // while it does. Wait until that's over and the bot comment count has settled, or scenes start mid-load.
+  if (extension) {
+    await page.waitForFunction(() => !document.querySelector('.ajax-pagination-btn'), null, { timeout: 120_000 });
+    const count = () => page.evaluate(() => document.querySelector('#bdb-panel .bdb-comments')?.children.length ?? 0);
+    for (let last = -1, now = await count(); now !== last || !now; last = now, now = await count()) await page.waitForTimeout(1500);
+  }
   await page.waitForTimeout(1500);
   return { context, page };
 }
@@ -93,18 +101,24 @@ const SCENES = {
   },
   // Reveal one result from the panel (scrolls to and highlights it), then hide it again.
   'reveal-comment': async ({ step, panel }) => {
-    const eye = panel.locator('li[data-status="completed"] a[data-id]').first();
+    const eye = panel.locator('.bdb-comments li[data-status="completed"] a[data-id]').first();
     await step('reveal result', 'timeline', eye);
     await step('hide result', 'timeline', eye);
   },
   // Jump from a run in the panel to the human comment that triggered it.
   'go-to-trigger': async ({ step, panel }) => {
-    await step('go to trigger', 'timeline', panel.locator('li[data-status="completed"] a[data-goto]').first());
+    await step('go to trigger', 'timeline', panel.locator('.bdb-comments li[data-status="completed"] a[data-goto]').first());
   },
   // Show only finished results, then scroll down to them.
   'results-only': async ({ step, panel, page, wheelTo }) => {
     const bots = page.locator('.timeline-comment-group:visible', { has: page.locator('a.author', { hasText: 'adriangbot' }) });
     await step('results only', 'timeline', panel.getByRole('button', { name: 'Results only' }), () => wheelTo(bots.first()));
+  },
+  // Switch to the Runs tab (benchmarks grouped by request), then jump to a completed result from its update time.
+  'runs-view': async ({ step, panel, page }) => {
+    await step('open runs', 'panel', panel.locator('[data-view="runs"]'));
+    const result = panel.locator('.bdb-run', { has: page.locator('.bdb-dot[title="completed"]') }).first();
+    await step('go to result', 'timeline', result.locator('.bdb-updates a').last());
   },
   // Turn the whole extension off from the toolbar (all bot comments come back, panel goes), then on again.
   // The real toolbar is browser UI the screencast can't capture, so a labelled stand-in button showing the
@@ -212,7 +226,7 @@ if (!only.length || only.includes('before-after')) {
   }
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error',
     '-f', 'concat', '-safe', '0', '-i', clips[0], '-f', 'concat', '-safe', '0', '-i', clips[1], '-filter_complex',
-    `[0][1]hstack=shortest=1,fps=15,scale=1800:-1:flags=lanczos,${PALETTE}`,
+    `[0][1]hstack=shortest=1,fps=12,scale=1800:-1:flags=lanczos,${PALETTE}`,
     path.join(OUT, 'before-after.gif')]);
   console.log('recorded before-after');
 }

@@ -1,6 +1,8 @@
 // ponytail: bot list + regexes are the only "config"; make a settings page when a second repo needs it
 const BOTS = new Set(['adriangbot']);
 const shown = new Set();
+let items = []; // bot comments from the last scan
+let view = 'comments'; // panel tab: 'comments' (one row per bot comment) or 'runs' (grouped by request)
 let requests = []; // ids of the human "run benchmark …" comments the bot replied to
 let enabled = null; // toolbar on/off switch (see background.js); null until read from storage
 const ICON = {
@@ -22,11 +24,12 @@ function scan() {
   // Turned off: leave the page exactly as GitHub renders it.
   if (!enabled) {
     for (const c of document.querySelectorAll('.bdb-hidden')) c.classList.remove('bdb-hidden');
-    return render([]);
+    items = [];
+    return render();
   }
   // GitHub paginates long timelines; bot spam is exactly what gets hidden behind "Load more".
   document.querySelector('.ajax-pagination-btn, button.ajax-pagination-btn')?.click();
-  const items = [];
+  items = [];
   const seen = new Set();
   for (const c of document.querySelectorAll('.timeline-comment-group, .js-timeline-item')) {
     const author = c.querySelector('a.author')?.textContent?.trim();
@@ -45,7 +48,15 @@ function scan() {
     // Hide all bot comments; the panel is the view, 👁 reveals one.
     c.classList.toggle('bdb-hidden', !shown.has(id));
     const time = (c.querySelector('relative-time')?.shadowRoot?.textContent ?? c.querySelector('relative-time')?.textContent ?? '').replace(/^on /, '');
-    items.push({ id, status, trigger, cmd, time });
+    const at = c.querySelector('relative-time')?.getAttribute('datetime') ?? '';
+    // Which benchmark this comment is about, from the bot's own text (never the human request, which may
+    // just say "run benchmarks"). Resource-usage headings use the same name as the running comment.
+    const name = (text.match(/Benchmarks requested:\s*([\w-]+)/)  // failed
+      ?? text.match(/([\w-]+) — base/)                            // completed: resource usage
+      ?? text.match(/run benchmark\s+([\w-]+)/)                    // run configuration (running, criterion)
+      ?? text.match(/using:\s*([\w-]+)/))?.[1] ?? '';             // old running format
+    const sha = text.match(/Comparing \S+ \(([0-9a-f]{7})[0-9a-f]*\)/)?.[1] ?? '';
+    items.push({ id, status, trigger, cmd, time, at, name, sha, result: result(status, text) });
   }
   // The requests that triggered the bot are part of the same noise: hidden alongside it, ⚡ reveals one.
   requests = [...new Set(items.map(i => i.trigger.slice(1)).filter(Boolean))];
@@ -53,7 +64,61 @@ function scan() {
     const el = document.getElementById(id);
     (el?.closest('.js-timeline-item') ?? el)?.classList.toggle('bdb-hidden', !shown.has(id));
   }
-  render(items);
+  render();
+}
+
+// One-line outcome of a bot comment: the speed comparison for results, the reason for failures.
+function result(status, text) {
+  if (status === 'failed') {
+    return text.match(/reason:\s*`?([^`)]+)`?\)/)?.[1] ?? text.match(/failed[^.\n]*/)?.[0] ?? 'failed';
+  }
+  if (status !== 'completed') return '';
+  // SQL suites print a summary table (the first one; a second one repeats it for the distribution).
+  const count = label => text.match(new RegExp(`Queries ${label}\\s*│\\s*(\\d+)`))?.[1];
+  if (count('Faster') !== undefined) {
+    const parts = [`${count('Faster')} faster`, `${count('Slower')} slower`, `${count('with No Change')} same`];
+    if (+count('with Failure')) parts.push(`${count('with Failure')} failed`);
+    const totals = [...text.matchAll(/Total Time \([^)]*\)\s*│\s*([\d.]+)\s*(ms|s)\b/g)].slice(0, 2).map(m => m[1] * (m[2] === 's' ? 1000 : 1));
+    if (totals.length === 2 && totals[0]) parts.push(`total ${pct(totals[1] / totals[0] - 1)}`);
+    return parts.join(' · ');
+  }
+  // Criterion prints one row per bench with each side's time ratio to the faster one (1.00 = faster).
+  let faster = 0, slower = 0, same = 0;
+  for (const [, base, branch] of text.matchAll(/^.*?\s(\d+\.\d\d)\s+[\d.]+±[\d.]+\S+\s+\S+ \S+\s+(\d+\.\d\d)\s+[\d.]+±/gm)) {
+    if (base >= 1.05) faster++; else if (branch >= 1.05) slower++; else same++;
+  }
+  return faster + slower + same ? `${faster} faster · ${slower} slower · ${same} same (±5%)` : '';
+}
+
+const pct = x => `${x > 0 ? '+' : x < 0 ? '−' : '±'}${Math.abs(x * 100).toFixed(1)}%`;
+const clock = at => at ? new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+const duration = ms => ms < 60e3 ? '' : ms < 3600e3 ? `${Math.round(ms / 60e3)}m` : `${Math.floor(ms / 3600e3)}h ${Math.round(ms % 3600e3 / 60e3)}m`;
+
+// Groups bot comments into requests (by the trigger link the bot puts in every comment), and each request
+// into its benchmarks (by name), each benchmark carrying its updates in order: running → completed/failed.
+function runs(items) {
+  const groups = new Map();
+  for (const i of [...items].sort((a, b) => a.at.localeCompare(b.at))) {
+    const key = i.trigger.slice(1) || i.id;
+    if (!groups.has(key)) groups.set(key, { trigger: key, time: `${i.time} ${clock(i.at)}`, sha: '', benchmarks: new Map() });
+    const g = groups.get(key);
+    g.sha ||= i.sha;
+    const bench = i.name || i.id;
+    if (!g.benchmarks.has(bench)) g.benchmarks.set(bench, { name: i.name, updates: [] });
+    g.benchmarks.get(bench).updates.push(i);
+  }
+  return [...groups.values()].map(g => {
+    const benchmarks = [...g.benchmarks.values()].map(b => {
+      const last = b.updates.at(-1);
+      return {
+        name: b.name, status: last.status, result: last.result,
+        duration: duration(new Date(last.at) - new Date(b.updates[0].at)),
+        updates: b.updates.map(u => ({ id: u.id, status: u.status, clock: clock(u.at) })),
+      };
+    });
+    const counts = benchmarks.reduce((a, b) => ((a[b.status] = (a[b.status] || 0) + 1), a), {});
+    return { ...g, benchmarks, summary: Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(' · ') };
+  });
 }
 
 // Same as clicking a comment's timestamp: :target gives GitHub's highlight + scroll.
@@ -72,7 +137,9 @@ function goTo(id, tries = 10) {
   for (const ms of [0, 250, 800]) setTimeout(() => el.scrollIntoView({ block: 'center' }), ms);
 }
 
-function render(items) {
+// Renders the module-level items. (Not a parameter: the click handlers below are created once, on the first
+// render, and must see the latest scan rather than whatever that first render had.)
+function render() {
   let panel = document.getElementById('bdb-panel');
   if (!items.length) return panel?.remove();
   if (!panel) {
@@ -90,15 +157,25 @@ function render(items) {
           <button class="btn btn-sm BtnGroup-item" data-all="completed" title="Only completed benchmarks; requests and running/failed stay hidden">Results only</button>
           <button class="btn btn-sm BtnGroup-item" data-all="0" title="Hide bot comments and the requests that triggered them">None</button>
         </div>
-      </div><ul></ul>`;
+      </div>
+      <div class="bdb-tabs" role="tablist">
+        <button role="tab" data-view="comments">Comments</button>
+        <button role="tab" data-view="runs" title="Every benchmark run, grouped by the request that triggered it">Runs</button>
+      </div>
+      <ul class="bdb-comments"></ul><ul class="bdb-runs"></ul>`;
     panel.querySelector('.Box-header').onclick = () => panel.classList.toggle('bdb-collapsed');
+    panel.querySelector('.bdb-tabs').onclick = e => {
+      const tab = e.target.closest('[data-view]');
+      if (!tab) return;
+      view = tab.dataset.view;
+      chrome.storage.local.set({ view });
+      render();
+    };
     panel.querySelector('.bdb-toolbar').onclick = e => {
       const b = e.target.closest('button');
       if (!b) return;
       shown.clear();
-      for (const li of panel.querySelectorAll('li')) {
-        if (b.dataset.all === '1' || li.dataset.status === b.dataset.all) shown.add(li.querySelector('a[data-id]').dataset.id);
-      }
+      for (const i of items) if (b.dataset.all === '1' || i.status === b.dataset.all) shown.add(i.id);
       if (b.dataset.all === '1') requests.forEach(id => shown.add(id));
       scan();
     };
@@ -117,7 +194,28 @@ function render(items) {
   const counts = items.reduce((a, i) => ((a[i.status] = (a[i.status] || 0) + 1), a), {});
   panel.querySelector('.Box-title').innerHTML =
     `<strong>${items.length} bot comments</strong><br><span class="color-fg-muted">${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(' · ')}</span>`;
-  panel.querySelector('ul').innerHTML = items.map(i => `
+  panel.dataset.view = view;
+  for (const tab of panel.querySelectorAll('[data-view]')) tab.setAttribute('aria-selected', tab.dataset.view === view);
+  const groups = runs(items);
+  panel.querySelector('[data-view="comments"]').textContent = `Comments (${items.length})`;
+  panel.querySelector('[data-view="runs"]').textContent = `Runs (${groups.reduce((n, g) => n + g.benchmarks.length, 0)})`;
+  panel.querySelector('.bdb-runs').innerHTML = groups.map(g => `
+    <li class="bdb-request">
+      <a href="#${g.trigger}" data-goto title="Go to the request">${ICON.zap}</a>
+      <span>Request · ${g.time}${g.sha ? ` · <code>${g.sha}</code>` : ''}</span>
+      <span class="bdb-time">${g.summary}</span>
+    </li>
+    ${g.benchmarks.map(b => `
+    <li class="bdb-run bdb-${b.status}" data-status="${b.status}">
+      <div class="bdb-run-head">
+        <span class="bdb-dot" title="${b.status}"></span>
+        <span class="bdb-cmd">${b.name || 'unknown benchmark'}</span>
+        <span class="bdb-updates">${b.updates.map(u => `<a href="#${u.id}" data-goto title="Go to the ${u.status} update">${u.clock}</a>`).join(' → ')}</span>
+        ${b.duration ? `<span class="bdb-time" title="From the first update to the last">(${b.duration})</span>` : ''}
+      </div>
+      <div class="bdb-result" title="${b.result}">${b.result || b.status}</div>
+    </li>`).join('')}`).join('');
+  panel.querySelector('.bdb-comments').innerHTML = items.map(i => `
     <li class="bdb-${i.status}" data-status="${i.status}">
       <span class="bdb-dot" title="${i.status}"></span>
       <span class="bdb-cmd" title="${i.cmd}">${i.cmd || i.status}</span>
@@ -142,10 +240,16 @@ function render(items) {
   });
 }
 
-// GitHub is a turbo SPA and lazy-loads timeline chunks; rescan on DOM changes.
+// GitHub is a turbo SPA and lazy-loads timeline chunks; rescan on DOM changes. Changes inside the panel
+// are our own re-renders: rescanning on them would re-render forever (and swap rows out mid-click).
 let t;
-new MutationObserver(() => { clearTimeout(t); t = setTimeout(scan, 300); }).observe(document.body, { childList: true, subtree: true });
-chrome.storage.local.get({ enabled: true }).then(s => { enabled = s.enabled; scan(); });
+const inPanel = m => (m.target.nodeType === 1 ? m.target : m.target.parentElement)?.closest('#bdb-panel');
+new MutationObserver(ms => {
+  if (ms.every(inPanel)) return;
+  clearTimeout(t);
+  t = setTimeout(scan, 300);
+}).observe(document.body, { childList: true, subtree: true });
+chrome.storage.local.get({ enabled: true, view }).then(s => { view = s.view; enabled = s.enabled; scan(); });
 chrome.storage.onChanged.addListener(changes => {
   if (!('enabled' in changes)) return;
   enabled = changes.enabled.newValue !== false;

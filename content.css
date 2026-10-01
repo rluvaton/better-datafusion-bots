@@ -10,9 +10,9 @@
 #bdb-panel * { transition: none !important; animation: none !important; }
 #bdb-panel .btn-sm { font-size: 11px; padding: 2px 8px; height: auto; }
 #bdb-panel.bdb-collapsed .bdb-caret { transform: rotate(180deg); }
-#bdb-panel.bdb-collapsed ul, #bdb-panel.bdb-collapsed .bdb-toolbar { display: none; }
+#bdb-panel.bdb-collapsed ul, #bdb-panel.bdb-collapsed .bdb-toolbar, #bdb-panel.bdb-collapsed .bdb-tabs { display: none; }
 #bdb-panel .bdb-toolbar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--borderColor-default, #d0d7de); white-space: nowrap; }
-#bdb-panel ul { list-style: none; margin: 0; overflow: auto; }
+#bdb-panel ul { list-style: none; margin: 0; padding: 0; overflow: auto; }
 #bdb-panel li { display: flex; align-items: center; gap: 8px; padding: 6px 12px; }
 #bdb-panel li + li { border-top: 1px solid var(--borderColor-muted, #d8dee4); }
 #bdb-panel li:hover { background: var(--bgColor-muted, #f6f8fa); }
@@ -33,3 +33,25 @@
   color: var(--fgColor-accent, #0969da);
   font-weight: 600;
 }
+/* Tabs: Comments (one row per bot comment) / Runs (grouped by request). Only the active tab's list shows. */
+#bdb-panel .bdb-tabs { display: flex; gap: 4px; padding: 0 12px; border-bottom: 1px solid var(--borderColor-default, #d0d7de); }
+#bdb-panel .bdb-tabs button { all: unset; cursor: pointer; padding: 6px 4px; margin-bottom: -1px; color: var(--fgColor-muted, #656d76); border-bottom: 2px solid transparent; }
+#bdb-panel .bdb-tabs button:hover { color: var(--fgColor-default, #1f2328); }
+#bdb-panel .bdb-tabs button[aria-selected="true"] { color: var(--fgColor-default, #1f2328); font-weight: 600; border-bottom-color: var(--underlineNav-borderColor-active, #fd8c73); }
+#bdb-panel[data-view="comments"] .bdb-runs, #bdb-panel[data-view="runs"] .bdb-comments { display: none; }
+
+/* Runs: a header row per request, then two-line rows per benchmark. */
+#bdb-panel .bdb-request { background: var(--bgColor-muted, #f6f8fa); font-weight: 600; }
+#bdb-panel .bdb-request > span:first-of-type { flex: 1; }
+#bdb-panel .bdb-request a { display: inline-flex; color: var(--fgColor-muted, #656d76); }
+#bdb-panel .bdb-request a:hover { color: var(--fgColor-accent, #0969da); }
+#bdb-panel .bdb-request code { font-weight: normal; font-size: 11px; }
+#bdb-panel .bdb-request .bdb-time { font-weight: normal; }
+#bdb-panel li.bdb-run { flex-direction: column; align-items: stretch; gap: 2px; padding-left: 28px; }
+#bdb-panel .bdb-run-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#bdb-panel .bdb-run-head { margin-left: -16px; }
+#bdb-panel .bdb-result { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fgColor-muted, #656d76); }
+#bdb-panel .bdb-failed .bdb-result { color: var(--fgColor-danger, #cf222e); }
+#bdb-panel .bdb-updates { white-space: nowrap; color: var(--fgColor-muted, #656d76); font-size: 11px; }
+#bdb-panel .bdb-updates a { color: inherit; }
+#bdb-panel .bdb-updates a:hover { color: var(--fgColor-accent, #0969da); }
