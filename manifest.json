@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Better DataFusion Bots",
+  "version": "0.1.0",
+  "description": "Collapses benchmark bot comments on apache/datafusion PRs into a compact status panel.",
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/apache/datafusion/pull/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
