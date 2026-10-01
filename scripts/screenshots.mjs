@@ -13,11 +13,12 @@ const viewport = { width: 1280, height: 800 };
 // No dithering: GitHub's UI is flat colours, and dither noise shimmers between frames (reads as flicker).
 const PALETTE = 'split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=none';
 
-// recording: 1x pixels (GIF-sized) and a drawn cursor, for pages that will be captured with capture().
-async function open({ extension = true, colorScheme = 'light', recording, label, size = viewport } = {}) {
+// cursor: draw one, for pages captured with capture() that click things. Always 2x pixels: capturing at 1x
+// and then scaling down for the GIF leaves blurry ~8px text.
+async function open({ extension = true, colorScheme = 'light', cursor, label, size = viewport } = {}) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bdb-shots-'));
   const context = await chromium.launchPersistentContext(dir, {
-    channel: 'chromium', viewport: size, colorScheme, deviceScaleFactor: recording ? 1 : 2,
+    channel: 'chromium', viewport: size, colorScheme, deviceScaleFactor: 2,
     args: extension ? [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`] : [],
   });
   if (label) await context.addInitScript(([text, color]) => addEventListener('DOMContentLoaded', () => {
@@ -27,7 +28,7 @@ async function open({ extension = true, colorScheme = 'light', recording, label,
     document.body.append(l);
   }), label);
   // Captured frames have no cursor; draw one so viewers can follow the clicks.
-  if (recording) await context.addInitScript(() => addEventListener('DOMContentLoaded', () => {
+  if (cursor) await context.addInitScript(() => addEventListener('DOMContentLoaded', () => {
     const c = document.createElement('div');
     c.style.cssText = 'position:fixed;z-index:99999;pointer-events:none;width:18px;height:18px;margin:-9px 0 0 -9px;border-radius:50%;background:rgba(9,105,218,.35);border:2px solid #0969da;left:-50px;top:-50px;transition:transform .1s';
     document.body.append(c);
@@ -105,6 +106,29 @@ const SCENES = {
     const bots = page.locator('.timeline-comment-group:visible', { has: page.locator('a.author', { hasText: 'adriangbot' }) });
     await step('results only', 'timeline', panel.getByRole('button', { name: 'Results only' }), () => wheelTo(bots.first()));
   },
+  // Turn the whole extension off from the toolbar (all bot comments come back, panel goes), then on again.
+  // The real toolbar is browser UI the screencast can't capture, so a labelled stand-in button showing the
+  // real icon is drawn in the page; clicking it runs the same toggle() as chrome.action.onClicked.
+  'toggle-extension': async ({ step, page }) => {
+    const worker = page.context().serviceWorkers()[0] ?? await page.context().waitForEvent('serviceworker');
+    // Inline SVG: GitHub's CSP blocks data: images.
+    const icon = on => fs.readFileSync(path.join(EXT, `icons/icon${on ? '' : '-off'}.svg`), 'utf8').replace('<svg ', '<svg width="24" height="24" ');
+    await page.evaluate(svg => {
+      const b = document.createElement('div');
+      b.id = 'bdb-toolbar-standin';
+      b.innerHTML = `<i style="display:flex"></i><span>Toolbar button</span>`;
+      b.style.cssText = 'position:fixed;z-index:99998;top:72px;right:16px;display:flex;align-items:center;gap:8px;padding:6px 12px 6px 8px;border-radius:8px;background:#fff;border:1px solid #d0d7de;box-shadow:0 2px 8px rgba(0,0,0,.15);font:500 13px -apple-system,system-ui,sans-serif;color:#57606a;cursor:pointer';
+      b.querySelector('i').innerHTML = svg;
+      document.body.append(b);
+    }, icon(true));
+    const button = page.locator('#bdb-toolbar-standin i');
+    const toggle = async on => {
+      await worker.evaluate(() => toggle());
+      await page.evaluate(svg => document.querySelector('#bdb-toolbar-standin i').innerHTML = svg, icon(on));
+    };
+    await step('turn off', 'timeline', button, () => toggle(false));
+    await step('turn on', 'timeline', button, () => toggle(true));
+  },
   // Collapse the panel out of the way, and bring it back.
   'collapse-panel': async ({ step, panel }) => {
     await step('collapse panel', 'panel', panel.locator('.Box-header'));
@@ -169,7 +193,7 @@ if (!only.length || only.includes('before-after')) {
   const size = { width: 900, height: 800 };
   const clips = [];
   for (const [extension, label] of [[false, ['Without extension', '#cf222e']], [true, ['With Better DataFusion Bots', '#1a7f37']]]) {
-    const { context, page } = await open({ extension, recording: true, label, size });
+    const { context, page } = await open({ extension, label, size });
     // Collapse the panel so it doesn't cover the (now clean) timeline; its header still shows the bot summary.
     if (extension) await page.locator('#bdb-panel .Box-header').click();
     await scrollToBots(page);
@@ -183,7 +207,7 @@ if (!only.length || only.includes('before-after')) {
   }
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error',
     '-f', 'concat', '-safe', '0', '-i', clips[0], '-f', 'concat', '-safe', '0', '-i', clips[1], '-filter_complex',
-    `[0][1]hstack=shortest=1,fps=12,scale=1200:-1:flags=lanczos,${PALETTE}`,
+    `[0][1]hstack=shortest=1,fps=15,scale=1800:-1:flags=lanczos,${PALETTE}`,
     path.join(OUT, 'before-after.gif')]);
   console.log('recorded before-after');
 }
@@ -195,11 +219,11 @@ for (const scene of only.length ? only.filter(s => s !== 'before-after') : Objec
     catch (e) { throw new Error(`scene "${scene}": ${e.message}`); }
     finally { await context.close(); }
   }
-  const { context, page } = await open({ recording: true });
+  const { context, page } = await open({ cursor: true });
   const frames = await play(page, scene, { check: false });
   await context.close();
   execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', frames, '-vf',
-    `fps=12,scale=960:-1:flags=lanczos,${PALETTE}`,
+    `fps=15,scale=1600:-1:flags=lanczos,${PALETTE}`,
     path.join(OUT, `${scene}.gif`)]);
   console.log('recorded', scene);
 }

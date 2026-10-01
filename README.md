@@ -36,6 +36,14 @@ Click ⚡ on a row to jump to the human `run benchmark …` comment that started
 
 ![Clicking Results only, then scrolling down to a completed benchmark result](docs/results-only.gif)
 
+### Turn it off from the toolbar
+
+Click the extension's toolbar icon to turn it off on every PR. All bot comments come back, the panel goes away, and the icon turns grey (<img src="icons/icon-off-16.png" width="16" alt="">). Click it again to turn it back on (<img src="icons/icon-16.png" width="16" alt="">). Open tabs update immediately, and the setting is remembered. Pin the extension (puzzle-piece menu → 📌) to keep the button in the toolbar.
+
+![Clicking the toolbar icon turns the extension off (bot comments return, panel disappears) and on again](docs/toggle-extension.gif)
+
+<sub>The browser toolbar can't be captured, so the GIF shows a stand-in button with the real icon.</sub>
+
 ### Collapse the panel
 
 Click the panel's header to collapse it to a one-line summary, and click again to expand it.
@@ -61,7 +69,7 @@ After pulling updates, click ↻ on the extension's card and refresh the PR tab.
 1. Open `about:debugging#/runtime/this-firefox`.
 2. Click **Load Temporary Add-on…** and select `manifest.json`.
 
-Firefox removes temporary add-ons when it restarts.
+Firefox removes temporary add-ons when it restarts. Firefox doesn't run Manifest V3 background service workers, so the toolbar on/off button doesn't work there; the extension stays on.
 
 ## Development
 

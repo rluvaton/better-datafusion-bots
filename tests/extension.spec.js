@@ -85,6 +85,29 @@ test('trigger link scrolls to the human comment; show/hide all', async ({ contex
   expect(await page.locator('.bdb-hidden').count()).toBeGreaterThan(0);
 });
 
+test('toolbar button turns the extension off and on', async ({ context }) => {
+  const page = await context.newPage();
+  await page.goto(PR);
+  const panel = page.locator('#bdb-panel');
+  await expect(panel).toBeVisible();
+  const worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
+  // toggle() is what chrome.action.onClicked runs; Playwright can't click the browser toolbar itself.
+  await worker.evaluate(() => toggle());
+  await expect(panel).toHaveCount(0);
+  await expect(page.locator('.bdb-hidden')).toHaveCount(0);
+  await expect.poll(() => worker.evaluate(() => chrome.action.getTitle({}))).toContain(': off');
+  // Stays off for pages opened later.
+  const other = await context.newPage();
+  await other.goto(PR);
+  await other.waitForTimeout(1000);
+  await expect(other.locator('#bdb-panel')).toHaveCount(0);
+
+  await worker.evaluate(() => toggle());
+  await expect(panel).toBeVisible();
+  expect(await page.locator('.bdb-hidden').count()).toBeGreaterThan(0);
+  await expect.poll(() => worker.evaluate(() => chrome.action.getTitle({}))).toContain(': on');
+});
+
 // Pagination can't be snapshotted; run against live GitHub only when asked: LIVE=1 npm test
 test('live: auto-clicks "Load more"', async ({ context }) => {
   test.skip(!process.env.LIVE, 'set LIVE=1 to hit github.com');

@@ -1,6 +1,6 @@
 # Better DataFusion Bots
 
-Manifest V3 content-script extension (no build step) that hides benchmark-bot comments on apache/datafusion PRs and lists them in a floating panel. Code: `content.js`, `content.css`, `manifest.json`. Tests: `npm test` (Playwright, offline against `tests/fixtures/`).
+Manifest V3 extension (no build step) that hides benchmark-bot comments on apache/datafusion PRs and lists them in a floating panel. Code: `content.js` + `content.css` (the page), `background.js` (toolbar button: turns the extension on/off via `storage.local` `enabled`), `manifest.json`. Tests: `npm test` (Playwright, offline against `tests/fixtures/`).
 
 ## Keep README images in sync
 
@@ -16,7 +16,7 @@ Any change to a feature or to the UI (panel layout, styles, buttons, statuses, b
    ```
 5. Commit the regenerated images with the code change.
 
-If you change `icons/icon.svg`, run `npm run icons`.
+If you change `icons/icon.svg` or `icons/icon-off.svg` (the grey toolbar icon shown while turned off), run `npm run icons`.
 
 ## What's generated
 
@@ -27,6 +27,7 @@ If you change `icons/icon.svg`, run `npm run icons`.
 | `docs/reveal-comment.gif` | 👁 on a completed row reveals, scrolls to and highlights that result; 👁 again hides it. |
 | `docs/go-to-trigger.gif` | ⚡ on a completed row jumps to the human comment that triggered the run. |
 | `docs/results-only.gif` | **Results only**, then a wheel scroll down to the first visible result. |
+| `docs/toggle-extension.gif` | Clicking the toolbar button turns the extension off (bot comments return, panel goes, icon greys out) and on again. The real toolbar is browser UI the screencast can't capture, so the scene draws a labelled stand-in button with the real icon that calls the same `toggle()`. |
 | `docs/collapse-panel.gif` | Clicking the panel header collapses it, clicking again expands it. |
 | `docs/panel.png`, `docs/panel-dark.png` | The panel alone, light and dark themes. |
 
@@ -40,5 +41,5 @@ If you change `icons/icon.svg`, run `npm run icons`.
   - Dithering shimmers on GitHub's flat greys → the palette uses `dither=none`.
   - A real one-frame scroll jitter in the extension itself (hash jump, then re-center) → `goTo` in `content.js` centers instantly in the same task. If the flicker check flags a frame, find out whether it's the recording or the extension before working around it.
 - Move the (fake, drawn-in-page) cursor to the target before clicking, and pause after, so viewers can follow what happened. Scroll with the mouse wheel when the scroll itself is part of the story.
-- Keep each feature GIF under ~1 MB and the before/after GIF under ~5 MB.
+- Capture at 2x pixels and output at 1600px wide (feature GIFs) or 1800px (before/after); smaller output makes text blurry. Keep each feature GIF under ~1.5 MB and the before/after GIF under ~6 MB.
 - The page comes from live GitHub, so if PR 24672 changes, re-check that every scene still makes sense.

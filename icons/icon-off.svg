@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Turned-off variant of icon.svg: same shape, all grey (shown in the toolbar while the extension is off). -->
+  <rect x="4" y="4" width="120" height="120" rx="26" fill="#8c959f"/>
+  <rect x="18" y="22" width="92" height="84" rx="12" fill="#ffffff"/>
+  <rect x="18" y="22" width="92" height="22" rx="12" fill="#eaeef2"/>
+  <rect x="18" y="34" width="92" height="10" fill="#eaeef2"/>
+  <rect x="28" y="30" width="44" height="6" rx="3" fill="#afb8c1"/>
+  <path d="M90 30l5 5 5-5" fill="none" stroke="#afb8c1" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="34" cy="58" r="7" fill="#afb8c1"/>
+  <rect x="48" y="55" width="50" height="6" rx="3" fill="#d0d7de"/>
+  <circle cx="34" cy="76" r="7" fill="#afb8c1"/>
+  <rect x="48" y="73" width="38" height="6" rx="3" fill="#d0d7de"/>
+  <circle cx="34" cy="94" r="7" fill="#afb8c1"/>
+  <rect x="48" y="91" width="44" height="6" rx="3" fill="#d0d7de"/>
+</svg>
